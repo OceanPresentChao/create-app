@@ -4,9 +4,9 @@
 import minimist from 'minimist'
 import prompt from 'prompts'
 import { bold, cyan, green, red, yellow } from 'kolorist'
+import { RepoNames, UserName } from './config'
 import 'zx/globals'
-const User = 'OceanPresentChao'
-
+import { getComander, isValidPackageName, toValidPackageName } from './utils'
 async function init() {
   const argv = minimist(process.argv.slice(2), { boolean: true })
   let targetDir = argv._[0]
@@ -14,7 +14,7 @@ async function init() {
   let response: {
     projectName?: string
     packageName?: string
-    projectTemplate?: string
+    projectTemplate?: keyof typeof RepoNames
   } = {}
   try {
     response = await prompt([
@@ -37,9 +37,9 @@ async function init() {
         name: 'projectTemplate',
         message: 'Select Project Template: ',
         choices: [
-          { title: 'starter-ts', value: 'starter-ts' },
-          { title: 'starter-unplugin', value: 'starter-unplugin' },
-          { title: 'starter-tauri', value: 'starter-tauri' },
+          { title: 'starter-ts', value: 'typescript' },
+          { title: 'starter-unplugin', value: 'unplugin' },
+          { title: 'starter-tauri', value: 'tauri' },
         ],
         initial: 0,
         hint: '- choose template to use depending your project type',
@@ -52,26 +52,25 @@ async function init() {
   }
   const cwd = process.cwd()
   const root = path.join(__dirname, targetDir)
+  const userAgent = process.env.npm_config_user_agent ?? ''
+  const packageManager = /pnpm/.test(userAgent) ? 'pnpm' : /yarn/.test(userAgent) ? 'yarn' : 'npm'
   const {
     projectTemplate,
+    projectName,
   } = response
-  await $`git clone https://github.com/${User}/${projectTemplate}`
-  cd (`./${projectTemplate}`)
+  const reponame = RepoNames[projectTemplate!]
+  await $`git clone https://github.com/${UserName}/${reponame}`
+  fs.renameSync(`./${projectTemplate}`, `./${projectName}`)
+  cd (`./${projectName}`)
   fs.removeSync('.git')
   console.log('\nDone. Now run:\n')
   if (root !== cwd)
     console.log(`  ${bold(red(`cd ${path.relative(cwd, root)}`))}`)
-  console.log(`  ${bold(green('pnpm install'))}`)
-  console.log(`  ${bold(cyan('pnpm run lint'))}`)
-  console.log(`  ${bold(yellow('pnpm run dev'))}`)
+  console.log(`  ${bold(green(getComander(packageManager, 'install')))}`)
+  console.log(`  ${bold(cyan(getComander(packageManager, 'lint')))}`)
+  console.log(`  ${bold(yellow(getComander(packageManager, 'dev')))}`)
 }
 
-function isValidPackageName(name: string) {
-  return /^(@[a-z0-9-*~][a-z0-9-*~_]*)?[a-z0-9~][a-z0-9-._~]*$/.test(name)
-}
-
-function toValidPackageName(name: string) {
-  return name.trim().toLowerCase()
-    .replace(/\s+/g, '-').replace(/^[_.]/, '').replace(/[^a-z0-9-~]/g, '-')
-}
-init()
+init().catch((e) => {
+  console.error(e)
+})
